@@ -1059,8 +1059,7 @@ class TemplateHitFeaturizer(abc.ABC):
         """
         self._mmcif_dir = mmcif_dir
         if not glob.glob(os.path.join(self._mmcif_dir, "*.cif")):
-            logging.error("Could not find CIFs in %s", self._mmcif_dir)
-            raise ValueError(f"Could not find CIFs in {self._mmcif_dir}")
+            logging.info("No CIFs in %s, not using templates...", self._mmcif_dir)
 
         try:
             self._max_template_date = datetime.datetime.strptime(
@@ -1215,13 +1214,28 @@ class CustomHitFeaturizer(TemplateHitFeaturizer):
     ) -> TemplateSearchResult:
         """Computes the templates for given query sequence (more details above)."""
         logging.info("Featurizing mmcif_dir: %s", self._mmcif_dir)
+        has_templates = False
+        for f in os.listdir(self._mmcif_dir):
+            if f.endswith(".cif"):
+                has_templates = True
+                break
+        if not has_templates:
+            template_features = empty_template_feats(len(query_sequence))
+            errors = []
+            warnings = []
+            return TemplateSearchResult(features=template_features, 
+                                        errors=errors, 
+                                        warnings=warnings
+                                       )  
+
         return get_custom_template_features(
             self._mmcif_dir,
             query_sequence=query_sequence,
             pdb_id="test",
             chain_id="A",
             kalign_binary_path=self._kalign_binary_path,
-        )   
+        )
+
 class HmmsearchHitFeaturizer(TemplateHitFeaturizer):
     def get_templates(
         self,
