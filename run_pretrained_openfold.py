@@ -388,6 +388,23 @@ def main(args):
 
                 logger.info(f"Model output written to {output_dict_path}...")
 
+            if args.save_scores:
+                output_dict_path = os.path.join(
+                    output_directory, f'{output_name}_output_dict_scores.pkl'
+                )
+                scores = ['lddt_logits', 'plddt', 
+                          'distogram_logits', 
+                          'tm_logits', 'ptm_score',
+                          'aligned_confidence_probs', 'predicted_aligned_error']
+                scores_dict = {}
+                for s in scores:
+                    scores_dict[s] = out[s]
+
+                with open(output_dict_path, "wb") as fp:
+                    pickle.dump(scores_dict, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+                logger.info(f"Scores output written to {output_dict_path}...")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -440,6 +457,10 @@ if __name__ == "__main__":
         help="Whether to save all model outputs, including embeddings, etc."
     )
     parser.add_argument(
+        "--save_scores", action="store_true", default=False,
+        help="Whether to save model scores, including pLDDT, pAE, and distograms."
+    )
+    parser.add_argument(
         "--cpus", type=int, default=4,
         help="""Number of CPUs with which to run alignment tools"""
     )
@@ -487,6 +508,7 @@ if __name__ == "__main__":
         "--use_deepspeed_evoformer_attention", action="store_true", default=False, 
         help="Whether to use the DeepSpeed evoformer attention layer. Must have deepspeed installed in the environment.",
     )
+
     add_data_args(parser)
     args = parser.parse_args()
 
