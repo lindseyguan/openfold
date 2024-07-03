@@ -746,6 +746,7 @@ class DataPipeline:
         else:
             for f in os.listdir(alignment_dir):
                 path = os.path.join(alignment_dir, f)
+                print(f'Reading {path}')
                 filename, ext = os.path.splitext(f)
 
                 if ext == ".a3m":
@@ -835,7 +836,6 @@ class DataPipeline:
         input_sequence: Optional[str] = None,
         alignment_index: Optional[Any] = None
     ) -> Mapping[str, Any]:
-
         msas = self._get_msas(
             alignment_dir, input_sequence, alignment_index
         )
@@ -1156,6 +1156,7 @@ class DataPipelineMultimer:
 
     def __init__(self,
                  monomer_data_pipeline: DataPipeline,
+                 paired_msa: bool
                  ):
         """Initializes the data pipeline.
         Args:
@@ -1168,6 +1169,7 @@ class DataPipelineMultimer:
           use_precomputed_msas: Whether to use pre-existing MSAs; see run_alphafold.
         """
         self._monomer_data_pipeline = monomer_data_pipeline
+        self._paired_msa = paired_msa
 
     def _process_single_chain(
             self,
@@ -1192,8 +1194,8 @@ class DataPipelineMultimer:
             )
 
             # We only construct the pairing features if there are 2 or more unique
-            # sequences.
-            if not is_homomer_or_monomer:
+            # sequences and we explicitly request MSA pairing.
+            if not is_homomer_or_monomer and self._paired_msa:
                 all_seq_msa_features = self._all_seq_msa_features(
                     chain_alignment_dir,
                     chain_alignment_index
@@ -1243,7 +1245,7 @@ class DataPipelineMultimer:
                       alignment_dir: str,
                       alignment_index: Optional[Any] = None
                       ) -> FeatureDict:
-        """Creates features."""
+        """Creates multimer features."""
         with open(fasta_path) as f:
             input_fasta_str = f.read()
 
@@ -1283,9 +1285,9 @@ class DataPipelineMultimer:
             sequence_features[seq] = chain_features
 
         all_chain_features = add_assembly_features(all_chain_features)
-
         np_example = feature_processing_multimer.pair_and_merge(
             all_chain_features=all_chain_features,
+            pair_msa_sequences=self._paired_msa
         )
 
         # Pad MSA to avoid zero-sized extra_msa.

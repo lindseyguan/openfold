@@ -113,7 +113,7 @@ def precompute_alignments(tags, seqs, alignment_dir, args):
             )
         else:
             logger.info(
-                f"Using precomputed alignments for {tag} at {alignment_dir}..."
+                f"Using precomputed alignments for {tag} at {alignment_dir}"
             )
 
         # Remove temporary FASTA file
@@ -234,6 +234,7 @@ def main(args):
     if is_multimer:
         data_processor = data_pipeline.DataPipelineMultimer(
             monomer_data_pipeline=data_processor,
+            paired_msa=args.paired_msa
         )
 
     output_dir_base = args.output_dir
@@ -317,15 +318,17 @@ def main(args):
                     )
 
                 feature_dicts[tag] = feature_dict
+
+            raw_msa = feature_dict['msa']
+            print(raw_msa.shape)
+
             processed_feature_dict = feature_processor.process_features(
                 feature_dict, mode='predict', is_multimer=is_multimer
             )
-
             processed_feature_dict = {
                 k: torch.as_tensor(v, device=args.model_device)
                 for k, v in processed_feature_dict.items()
             }
-
             if args.trace_model:
                 if rounded_seqlen > cur_tracing_interval:
                     logger.info(
@@ -392,10 +395,11 @@ def main(args):
                 output_dict_path = os.path.join(
                     output_directory, f'{output_name}_output_dict_scores.pkl'
                 )
-                scores = ['lddt_logits', 'plddt', 
-                          'distogram_logits', 
-                          'tm_logits', 'ptm_score',
-                          'aligned_confidence_probs', 'predicted_aligned_error']
+                scores = ['plddt', 'distogram_logits', 'ptm_score', 'predicted_aligned_error']
+                if is_multimer:
+                    scores.append('ptm_score')
+                    scores.append('iptm_score')
+
                 scores_dict = {}
                 for s in scores:
                     scores_dict[s] = out[s]
@@ -404,6 +408,16 @@ def main(args):
                     pickle.dump(scores_dict, fp, protocol=pickle.HIGHEST_PROTOCOL)
 
                 logger.info(f"Scores output written to {output_dict_path}...")
+
+            if args.save_msa:
+                output_dict_path = os.path.join(
+                    output_directory, f'{output_name}_output_msa_features.pkl'
+                )
+
+                with open(output_dict_path, "wb") as fp:
+                    pickle.dump(raw_msa, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+                logger.info(f"MSA output written to {output_dict_path}...")
 
 
 if __name__ == "__main__":
@@ -461,6 +475,10 @@ if __name__ == "__main__":
         help="Whether to save model scores, including pLDDT, pAE, and distograms."
     )
     parser.add_argument(
+        "--save_msa", action="store_true", default=False,
+        help="Whether to save MSA features"
+    )
+    parser.add_argument(
         "--cpus", type=int, default=4,
         help="""Number of CPUs with which to run alignment tools"""
     )
@@ -507,6 +525,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_deepspeed_evoformer_attention", action="store_true", default=False, 
         help="Whether to use the DeepSpeed evoformer attention layer. Must have deepspeed installed in the environment.",
+    )
+    parser.add_argument(
+        "--paired_msa", action="store_true", default=False, 
+        help="Whether to use paired MSAs.",
     )
 
     add_data_args(parser)

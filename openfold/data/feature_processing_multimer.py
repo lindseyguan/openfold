@@ -49,6 +49,7 @@ def _is_homomer_or_monomer(chains: Iterable[Mapping[str, np.ndarray]]) -> bool:
 
 def pair_and_merge(
     all_chain_features: MutableMapping[str, Mapping[str, np.ndarray]],
+    pair_msa_sequences: bool
 ) -> Mapping[str, np.ndarray]:
   """Runs processing on features to augment, pair and merge.
 
@@ -63,13 +64,14 @@ def pair_and_merge(
 
   np_chains_list = list(all_chain_features.values())
 
-  pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list)
+  pair_msa_sequences = not _is_homomer_or_monomer(np_chains_list) and pair_msa_sequences
 
   if pair_msa_sequences:
     np_chains_list = msa_pairing.create_paired_features(
         chains=np_chains_list
     )
     np_chains_list = msa_pairing.deduplicate_unpaired_sequences(np_chains_list)
+
   np_chains_list = crop_chains(
       np_chains_list,
       msa_crop_size=MSA_CROP_SIZE,
