@@ -434,6 +434,7 @@ class EvoformerBlock(MSABlock):
         _attn_chunk_size: Optional[int] = None,
         _offload_inference: bool = False,
         _offloadable_inputs: Optional[Sequence[torch.Tensor]] = None,
+        entity_id: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         msa_trans_mask = msa_mask if _mask_trans else None
@@ -491,6 +492,7 @@ class EvoformerBlock(MSABlock):
                         use_deepspeed_evo_attention=use_deepspeed_evo_attention,
                         use_lma=use_lma,
                         use_flash=use_flash,
+                        entity_id=entity_id
                     ),
                     inplace=inplace_safe,
                     )
@@ -870,6 +872,7 @@ class EvoformerStack(nn.Module):
         pair_mask: Optional[torch.Tensor],
         inplace_safe: bool,
         _mask_trans: bool,
+        entity_id: torch.Tensor = None
     ):
         blocks = [
             partial(
@@ -882,6 +885,7 @@ class EvoformerStack(nn.Module):
                 use_flash=use_flash,
                 inplace_safe=inplace_safe,
                 _mask_trans=_mask_trans,
+                entity_id=entity_id
             )
             for b in self.blocks
         ]
@@ -921,6 +925,7 @@ class EvoformerStack(nn.Module):
         use_lma: bool = False,
         use_flash: bool = False,
         _mask_trans: bool = True,
+        entity_id: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         assert(not (self.training or torch.is_grad_enabled()))
         blocks = self._prep_blocks(
@@ -966,6 +971,7 @@ class EvoformerStack(nn.Module):
         use_flash: bool = False,
         inplace_safe: bool = False,
         _mask_trans: bool = True,
+        entity_id: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
@@ -1008,6 +1014,7 @@ class EvoformerStack(nn.Module):
             pair_mask=pair_mask,
             inplace_safe=inplace_safe,
             _mask_trans=_mask_trans,
+            entity_id=entity_id
         )
 
         blocks_per_ckpt = self.blocks_per_ckpt

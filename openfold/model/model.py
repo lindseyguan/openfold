@@ -82,6 +82,7 @@ class AlphaFold(nn.Module):
         self.template_config = self.config.template
         self.extra_msa_config = self.config.extra_msa
         self.seqemb_mode = config.globals.seqemb_mode_enabled
+        self.chain_attention_mask = self.config.attention_mask
 
         # Main trunk + structure module
         if self.globals.is_multimer:
@@ -401,6 +402,10 @@ class AlphaFold(nn.Module):
                     _mask_trans=self.config._mask_trans,
                 )
 
+        if self.config.attention_mask:
+            entity_id = feats['entity_id']
+        else:
+            entity_id = None
         # Run MSA + pair embeddings through the trunk of the network
         # m: [*, S, N, C_m]
         # z: [*, N, N, C_z]
@@ -416,6 +421,7 @@ class AlphaFold(nn.Module):
                 use_deepspeed_evo_attention=self.globals.use_deepspeed_evo_attention,
                 use_lma=self.globals.use_lma,
                 _mask_trans=self.config._mask_trans,
+                entity_id=entity_id
             )
 
             del input_tensors
@@ -431,6 +437,7 @@ class AlphaFold(nn.Module):
                 use_flash=self.globals.use_flash,
                 inplace_safe=inplace_safe,
                 _mask_trans=self.config._mask_trans,
+                entity_id=entity_id
             )
 
         outputs["msa"] = m[..., :n_seq, :, :]

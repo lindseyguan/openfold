@@ -211,6 +211,7 @@ def main(args):
             kalign_binary_path=args.kalign_binary_path
             )
     elif is_multimer:
+        config.model.attention_mask = args.use_attention_mask
         template_featurizer = templates.HmmsearchHitFeaturizer(
             mmcif_dir=args.template_mmcif_dir,
             max_template_date=args.max_template_date,
@@ -320,7 +321,6 @@ def main(args):
                 feature_dicts[tag] = feature_dict
 
             raw_msa = feature_dict['msa']
-            print(raw_msa.shape)
 
             processed_feature_dict = feature_processor.process_features(
                 feature_dict, mode='predict', is_multimer=is_multimer
@@ -529,6 +529,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--paired_msa", action="store_true", default=False, 
         help="Whether to use paired MSAs.",
+    )
+    parser.add_argument(
+        "--use_attention_mask", action="store_true", default=False, 
+        help="Whether to use interchain attention masking.",
     )
 
     add_data_args(parser)

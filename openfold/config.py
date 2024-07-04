@@ -887,7 +887,8 @@ multimer_config_update = mlc.ConfigDict({
                 "c_out": 22
             },
         },
-        "recycle_early_stop_tolerance": 0.5  # For training, value is -1.
+        "recycle_early_stop_tolerance": 0.5,  # For training, value is -1.
+        "attention_mask": False
     },
     "loss": {
         "fape": {

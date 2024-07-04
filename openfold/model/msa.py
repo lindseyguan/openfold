@@ -229,6 +229,7 @@ class MSAAttention(nn.Module):
         inplace_safe: bool = False,
         _chunk_logits: Optional[int] = None,
         _checkpoint_chunks: Optional[bool] = None,
+        entity_id: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -256,7 +257,7 @@ class MSAAttention(nn.Module):
         if(use_flash):
             assert z is None
             biases = None
-        else:    
+        else:
             m, mask_bias, z = self._prep_inputs(
                 m, z, mask, inplace_safe=inplace_safe
             )
@@ -364,6 +365,7 @@ class MSAColumnAttention(nn.Module):
         use_deepspeed_evo_attention: bool = False,
         use_lma: bool = False,
         use_flash: bool = False,
+        entity_id: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -388,6 +390,7 @@ class MSAColumnAttention(nn.Module):
             use_deepspeed_evo_attention=use_deepspeed_evo_attention,
             use_lma=use_lma,
             use_flash=use_flash,
+            entity_id=entity_id
         )
 
         # [*, N_seq, N_res, C_in]
