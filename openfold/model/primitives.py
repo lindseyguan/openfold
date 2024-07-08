@@ -264,12 +264,22 @@ def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
 
 
 #@torch.jit.script
-def _attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, biases: List[torch.Tensor]) -> torch.Tensor:
+def _attention(query: torch.Tensor, 
+               key: torch.Tensor, 
+               value: torch.Tensor, 
+               biases: List[torch.Tensor],
+               verbose: bool = False) -> torch.Tensor:
     # [*, H, C_hidden, K]
     key = permute_final_dims(key, (1, 0))
 
     # [*, H, Q, K]
     a = torch.matmul(query, key)
+
+    if verbose:
+        print('att shape:', a.shape)
+        print('bias shape:')
+        for b in biases:
+            print(b.shape)
 
     for b in biases:
         a += b
@@ -350,6 +360,7 @@ class Attention(nn.Module):
         c_hidden: int,
         no_heads: int,
         gating: bool = True,
+        verbose: bool = False
     ):
         """
         Args:
@@ -398,6 +409,8 @@ class Attention(nn.Module):
             )
 
         self.sigmoid = nn.Sigmoid()
+
+        self._verbose = verbose
 
     def _prep_qkv(self,
         q_x: torch.Tensor, 
@@ -539,7 +552,7 @@ class Attention(nn.Module):
         elif use_flash:
             o = _flash_attn(q, k, v, flash_mask)
         else:
-            o = _attention(q, k, v, biases)
+            o = _attention(q, k, v, biases, verbose=self._verbose)
             o = o.transpose(-2, -3)
 
         o = self._wrap_up(o, q_x)

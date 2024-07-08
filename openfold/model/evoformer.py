@@ -469,6 +469,7 @@ class EvoformerBlock(MSABlock):
                         use_memory_efficient_kernel=False,
                         use_deepspeed_evo_attention=use_deepspeed_evo_attention,
                         use_lma=use_lma,
+                        entity_id=entity_id
                     )
                 ),
                 inplace=inplace_safe,
@@ -492,7 +493,7 @@ class EvoformerBlock(MSABlock):
                         use_deepspeed_evo_attention=use_deepspeed_evo_attention,
                         use_lma=use_lma,
                         use_flash=use_flash,
-                        entity_id=entity_id
+                        entity_id=None # no column attention for now
                     ),
                     inplace=inplace_safe,
                     )
@@ -618,6 +619,7 @@ class ExtraMSABlock(MSABlock):
         _attn_chunk_size: Optional[int] = None,
         _offload_inference: bool = False,
         _offloadable_inputs: Optional[Sequence[torch.Tensor]] = None,
+        entity_id: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if(_attn_chunk_size is None):
             _attn_chunk_size = chunk_size
@@ -651,6 +653,7 @@ class ExtraMSABlock(MSABlock):
                     use_memory_efficient_kernel=not (use_lma or use_deepspeed_evo_attention),
                     _checkpoint_chunks=
                         self.ckpt if torch.is_grad_enabled() else False,
+                    entity_id=entity_id
                 )
             ),
             inplace=inplace_safe,

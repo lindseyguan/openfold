@@ -402,10 +402,11 @@ class AlphaFold(nn.Module):
                     _mask_trans=self.config._mask_trans,
                 )
 
-        if self.config.attention_mask:
-            entity_id = feats['entity_id']
+        if self.chain_attention_mask:
+            entity_id = torch.tensor(feats['entity_id'])
         else:
             entity_id = None
+
         # Run MSA + pair embeddings through the trunk of the network
         # m: [*, S, N, C_m]
         # z: [*, N, N, C_z]

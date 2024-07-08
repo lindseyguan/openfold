@@ -42,6 +42,7 @@ class MSAAttention(nn.Module):
         pair_bias=False,
         c_z=None,
         inf=1e9,
+        verbose=False
     ):
         """
         Args:
@@ -84,7 +85,10 @@ class MSAAttention(nn.Module):
             self.c_in, 
             self.c_hidden, 
             self.no_heads,
+            verbose=verbose
         )
+
+        self._verbose = verbose
 
     @torch.jit.ignore
     def _chunk(self, 
@@ -132,6 +136,7 @@ class MSAAttention(nn.Module):
         z: Optional[torch.Tensor],
         mask: Optional[torch.Tensor],
         inplace_safe: bool = False,
+        entity_id: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: 
         n_seq, n_res = m.shape[-3:-1]
         if mask is None:
@@ -142,6 +147,14 @@ class MSAAttention(nn.Module):
 
         # [*, N_seq, 1, 1, N_res]
         mask_bias = (self.inf * (mask - 1))[..., :, None, None, :]
+
+        # [1, N_head, N_res, N_res]
+        if entity_id != None:
+            att_bias = (entity_id.unsqueeze(1) == entity_id).int()
+            att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1)
+            att_bias = att_bias.unsqueeze(0)
+        else:
+            att_bias = None
 
         if (self.pair_bias and 
             z is not None and                       # For the 
@@ -166,7 +179,7 @@ class MSAAttention(nn.Module):
             # [*, 1, no_heads, N_res, N_res]
             z = permute_final_dims(z, (2, 0, 1)).unsqueeze(-4)
 
-        return m, mask_bias, z
+        return m, mask_bias, z, att_bias
 
     @torch.jit.ignore
     def _chunked_msa_attn(self,
@@ -175,7 +188,8 @@ class MSAAttention(nn.Module):
         mask: Optional[torch.Tensor],
         chunk_logits: int,
         checkpoint: bool,
-        inplace_safe: bool = False
+        inplace_safe: bool = False,
+        entity_id: torch.Tensor = None
     ) -> torch.Tensor:
         """ 
         MSA attention with training-time chunking of the softmax computation.
@@ -185,12 +199,12 @@ class MSAAttention(nn.Module):
         MSA_DIM = -4
 
         def _get_qkv(m, z):
-            m, mask_bias, z = self._prep_inputs(
-                m, z, mask, inplace_safe=inplace_safe
+            m, mask_bias, z, att_bias = self._prep_inputs(
+                m, z, mask, inplace_safe=inplace_safe, entity_id=entity_id
             )
             m = self.layer_norm_m(m)
             q, k, v = self.mha._prep_qkv(m, m)
-            return m, q, k, v, mask_bias, z
+            return m, q, k, v, mask_bias, z, att_bias
 
         checkpoint_fn = get_checkpoint_fn()
 
@@ -198,7 +212,7 @@ class MSAAttention(nn.Module):
             m, q, k, v, mask_bias, z = checkpoint_fn(_get_qkv, m, z)
         else:
             m, q, k, v, mask_bias, z = _get_qkv(m, z)
-       
+
         o = _attention_chunked_trainable(
             query=q, 
             key=k, 
@@ -252,19 +266,23 @@ class MSAAttention(nn.Module):
                 chunk_logits=_chunk_logits, 
                 checkpoint=_checkpoint_chunks,
                 inplace_safe=inplace_safe,
+                entity_id=entity_id
             )
        
         if(use_flash):
             assert z is None
             biases = None
         else:
-            m, mask_bias, z = self._prep_inputs(
-                m, z, mask, inplace_safe=inplace_safe
+            m, mask_bias, z, att_bias = self._prep_inputs(
+                m, z, mask, inplace_safe=inplace_safe, entity_id=entity_id
             )
     
             biases = [mask_bias]
             if(z is not None):
                 biases.append(z)
+
+            if att_bias is not None:
+                biases.append(att_bias)
 
         if chunk_size is not None:
             m = self._chunk(
@@ -319,6 +337,7 @@ class MSARowAttentionWithPairBias(MSAAttention):
             pair_bias=True,
             c_z=c_z,
             inf=inf,
+            verbose=False,
         )
 
 
@@ -356,6 +375,7 @@ class MSAColumnAttention(nn.Module):
             pair_bias=False,
             c_z=None,
             inf=inf,
+            verbose=False
         )
 
     def forward(self, 
