@@ -403,8 +403,10 @@ class AlphaFold(nn.Module):
                 )
 
         if self.chain_attention_mask:
-            entity_id = torch.tensor(feats['entity_id'])
+            print('USING ENTITY ID')
+            entity_id = feats['entity_id']
         else:
+            print('NOT USING ENTITY ID')
             entity_id = None
 
         # Run MSA + pair embeddings through the trunk of the network

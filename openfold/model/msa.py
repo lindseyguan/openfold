@@ -150,9 +150,9 @@ class MSAAttention(nn.Module):
 
         # [1, N_head, N_res, N_res]
         if entity_id != None:
-            att_bias = (entity_id.unsqueeze(1) == entity_id).int()
-            att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1)
-            att_bias = att_bias.unsqueeze(0)
+            att_bias = (entity_id.unsqueeze(1) == entity_id).int() # make 2D tensor
+            att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+            att_bias = (self.inf * (att_bias.unsqueeze(0) - 1)) # unsqueeze and set to -inf
         else:
             att_bias = None
 

@@ -277,9 +277,7 @@ def _attention(query: torch.Tensor,
 
     if verbose:
         print('att shape:', a.shape)
-        print('bias shape:')
-        for b in biases:
-            print(b.shape)
+        print('att bias shape:', len(biases), biases[-1].shape)
 
     for b in biases:
         a += b

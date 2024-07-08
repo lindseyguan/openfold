@@ -203,7 +203,6 @@ def main(args):
 
     is_multimer = "multimer" in args.config_preset
     if is_multimer:
-        print('setting use_attention_mask')
         config.model.attention_mask = args.use_attention_mask
 
     is_custom_template = "use_custom_template" in args and args.use_custom_template
