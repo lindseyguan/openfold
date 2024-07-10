@@ -285,8 +285,7 @@ def sample_msa(batch, max_seq, max_extra_msa_seq, seed, inf=1e6):
     index_order = gumbel_argsort_sample_idx(logits, generator=g)
     sel_idx = index_order[:max_seq]
     extra_idx = index_order[max_seq:][:max_extra_msa_seq]
-
-    for k in ['msa', 'deletion_matrix', 'msa_mask', 'bert_mask']:
+    for k in ['msa', 'deletion_matrix', 'msa_mask', 'bert_mask', 'msa_entity_map']:
         if k in batch:
             batch['extra_' + k] = batch[k][extra_idx]
             batch[k] = batch[k][sel_idx]

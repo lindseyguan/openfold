@@ -136,7 +136,8 @@ class MSAAttention(nn.Module):
         z: Optional[torch.Tensor],
         mask: Optional[torch.Tensor],
         inplace_safe: bool = False,
-        entity_id: torch.Tensor = None
+        entity_id: torch.Tensor = None,
+        msa_entity_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: 
         n_seq, n_res = m.shape[-3:-1]
         if mask is None:
@@ -155,6 +156,14 @@ class MSAAttention(nn.Module):
             att_bias = (self.inf * (att_bias.unsqueeze(0) - 1)) # unsqueeze and set to -inf
         else:
             att_bias = None
+
+        if msa_entity_map != None:
+            att_bias_col = (msa_entity_map.unsqueeze(1) == msa_entity_map).int() # make 2D tensor
+            att_bias_col = att_bias_col.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+            att_bias_col = (self.inf * (att_bias_col.unsqueeze(0) - 1)) # unsqueeze and set to -inf
+        else:
+            att_bias_col = None
+
 
         if (self.pair_bias and 
             z is not None and                       # For the 
@@ -179,7 +188,7 @@ class MSAAttention(nn.Module):
             # [*, 1, no_heads, N_res, N_res]
             z = permute_final_dims(z, (2, 0, 1)).unsqueeze(-4)
 
-        return m, mask_bias, z, att_bias
+        return m, mask_bias, z, att_bias, att_bias_col
 
     @torch.jit.ignore
     def _chunked_msa_attn(self,
@@ -189,7 +198,8 @@ class MSAAttention(nn.Module):
         chunk_logits: int,
         checkpoint: bool,
         inplace_safe: bool = False,
-        entity_id: torch.Tensor = None
+        entity_id: torch.Tensor = None,
+        msa_entity_map: torch.Tensor = None
     ) -> torch.Tensor:
         """ 
         MSA attention with training-time chunking of the softmax computation.
@@ -199,19 +209,20 @@ class MSAAttention(nn.Module):
         MSA_DIM = -4
 
         def _get_qkv(m, z):
-            m, mask_bias, z, att_bias = self._prep_inputs(
-                m, z, mask, inplace_safe=inplace_safe, entity_id=entity_id
+            m, mask_bias, z, att_bias, att_bias_col = self._prep_inputs(
+                m, z, mask, inplace_safe=inplace_safe, 
+                entity_id=entity_id, msa_entity_map=msa_entity_map
             )
             m = self.layer_norm_m(m)
             q, k, v = self.mha._prep_qkv(m, m)
-            return m, q, k, v, mask_bias, z, att_bias
+            return m, q, k, v, mask_bias, z, att_bias, att_bias_col
 
         checkpoint_fn = get_checkpoint_fn()
 
         if(torch.is_grad_enabled() and checkpoint):
-            m, q, k, v, mask_bias, z = checkpoint_fn(_get_qkv, m, z)
+            m, q, k, v, mask_bias, z, att_bias, att_bias_col = checkpoint_fn(_get_qkv, m, z)
         else:
-            m, q, k, v, mask_bias, z = _get_qkv(m, z)
+            m, q, k, v, mask_bias, z, att_bias, att_bias_col = _get_qkv(m, z)
 
         o = _attention_chunked_trainable(
             query=q, 
@@ -243,7 +254,8 @@ class MSAAttention(nn.Module):
         inplace_safe: bool = False,
         _chunk_logits: Optional[int] = None,
         _checkpoint_chunks: Optional[bool] = None,
-        entity_id: torch.Tensor = None
+        entity_id: torch.Tensor = None,
+        msa_entity_map: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -266,15 +278,17 @@ class MSAAttention(nn.Module):
                 chunk_logits=_chunk_logits, 
                 checkpoint=_checkpoint_chunks,
                 inplace_safe=inplace_safe,
-                entity_id=entity_id
+                entity_id=entity_id,
+                msa_entity_map=msa_entity_map
             )
        
         if(use_flash):
             assert z is None
             biases = None
         else:
-            m, mask_bias, z, att_bias = self._prep_inputs(
-                m, z, mask, inplace_safe=inplace_safe, entity_id=entity_id
+            m, mask_bias, z, att_bias, att_bias_col = self._prep_inputs(
+                m, z, mask, inplace_safe=inplace_safe, 
+                entity_id=entity_id, msa_entity_map=msa_entity_map
             )
     
             biases = [mask_bias]
@@ -283,6 +297,9 @@ class MSAAttention(nn.Module):
 
             if att_bias is not None:
                 biases.append(att_bias)
+
+            if att_bias_col is not None:
+                biases.append(att_bias_col)
 
         if chunk_size is not None:
             m = self._chunk(
@@ -385,7 +402,7 @@ class MSAColumnAttention(nn.Module):
         use_deepspeed_evo_attention: bool = False,
         use_lma: bool = False,
         use_flash: bool = False,
-        entity_id: torch.Tensor = None
+        msa_entity_map: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -410,7 +427,7 @@ class MSAColumnAttention(nn.Module):
             use_deepspeed_evo_attention=use_deepspeed_evo_attention,
             use_lma=use_lma,
             use_flash=use_flash,
-            entity_id=entity_id
+            msa_entity_map=msa_entity_map
         )
 
         # [*, N_seq, N_res, C_in]
@@ -449,6 +466,7 @@ class MSAColumnGlobalAttention(nn.Module):
         mask: torch.Tensor,
         chunk_size: int,
         use_lma: bool = False,
+        msa_entity_map: torch.Tensor = None
     ) -> torch.Tensor:
         mha_input = {
             "m": m,
@@ -472,6 +490,7 @@ class MSAColumnGlobalAttention(nn.Module):
         mask: Optional[torch.Tensor] = None, 
         chunk_size: Optional[int] = None,
         use_lma: bool = False,
+        msa_entity_map: torch.Tensor = None
     ) -> torch.Tensor:
         n_seq, n_res, c_in = m.shape[-3:]
 

@@ -277,7 +277,7 @@ def _attention(query: torch.Tensor,
 
     if verbose:
         print('att shape:', a.shape)
-        print('att bias shape:', len(biases), biases[-1].shape)
+        print('att bias shape', len(biases), biases[-1].shape)
 
     for b in biases:
         a += b
@@ -526,18 +526,18 @@ class Attention(nn.Module):
             use_memory_efficient_kernel = False
         
         if use_memory_efficient_kernel:
-            if len(biases) > 2:
+            if len(biases) > 4:
                 raise ValueError(
                     "If use_memory_efficient_kernel is True, you may only "
-                    "provide up to two bias terms"
+                    "provide up to four bias terms"
                 )
             o = attention_core(q, k, v, *((biases + [None] * 2)[:2]))
             o = o.transpose(-2, -3)
         elif use_deepspeed_evo_attention:
-            if len(biases) > 2:
+            if len(biases) > 4:
                 raise ValueError(
                     "If use_deepspeed_evo_attention is True, you may only "
-                    "provide up to two bias terms"
+                    "provide up to four bias terms"
                 )
             o = _deepspeed_evo_attn(q, k, v, biases)
         elif use_lma:

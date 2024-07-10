@@ -23,7 +23,7 @@ import numpy as np
 
 
 # TODO: Move this into the config
-REQUIRED_FEATURES = frozenset({
+REQUIRED_FEATURES = set({
     'aatype', 'all_atom_mask', 'all_atom_positions', 'all_chains_entity_ids',
     'all_crops_all_chains_mask', 'all_crops_all_chains_positions',
     'all_crops_all_chains_residue_ids', 'assembly_num_chains', 'asym_id',
@@ -71,6 +71,8 @@ def pair_and_merge(
         chains=np_chains_list
     )
     np_chains_list = msa_pairing.deduplicate_unpaired_sequences(np_chains_list)
+  else:
+    REQUIRED_FEATURES.add('msa_entity_map')
 
   np_chains_list = crop_chains(
       np_chains_list,
@@ -122,6 +124,9 @@ def _crop_single_chain(chain: Mapping[str, np.ndarray],
                        pair_msa_sequences: bool,
                        max_templates: int) -> Mapping[str, np.ndarray]:
   """Crops msa sequences to `msa_crop_size`."""
+  if msa_crop_size == None:
+    return chain
+
   msa_size = chain['num_alignments']
 
   if pair_msa_sequences:
@@ -154,7 +159,9 @@ def _crop_single_chain(chain: Mapping[str, np.ndarray],
     if k_split in msa_pairing.TEMPLATE_FEATURES:
       chain[k] = chain[k][:templates_crop_size, :]
     elif k_split in msa_pairing.MSA_FEATURES:
-      if '_all_seq' in k and pair_msa_sequences:
+      if 'msa_entity_map' in k:
+        chain[k] = chain[k][:msa_crop_size]
+      elif '_all_seq' in k and pair_msa_sequences:
         chain[k] = chain[k][:msa_crop_size_all_seq, :]
       else:
         chain[k] = chain[k][:msa_crop_size, :]
@@ -241,7 +248,9 @@ def process_unmerged_features(
     # Add assembly_num_chains.
     chain_features['assembly_num_chains'] = np.asarray(num_chains)
 
-  # Add entity_mask.
+  # Add entity_mask and entity IDs for MSA.
   for chain_features in all_chain_features.values():
     chain_features['entity_mask'] = (
         chain_features['entity_id'] != 0).astype(np.int32)
+    chain_features['msa_entity_map'] = np.repeat(chain_features['entity_id'][0],
+                                                 chain_features['msa'].shape[0])

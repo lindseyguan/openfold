@@ -232,6 +232,9 @@ class AlphaFold(nn.Module):
         seq_mask = feats["seq_mask"]
         pair_mask = seq_mask[..., None] * seq_mask[..., None, :]
         msa_mask = feats["msa_mask"]
+        entity_id = feats["entity_id"]
+        msa_entity_map = feats["msa_entity_map"]
+        extra_msa_entity_map = feats["extra_msa_entity_map"]
 
         if self.globals.is_multimer:
             # Initialize the MSA and pair representations
@@ -346,6 +349,8 @@ class AlphaFold(nn.Module):
                     [m, template_embeds["template_single_embedding"]],
                     dim=-3
                 )
+                msa_entity_map = torch.cat([msa_entity_map, 
+                                            torch.zeros(4, device=feats["aatype"].device)]) # TODO: don't hardcode
 
                 # [*, S, N]
                 if not self.globals.is_multimer:
@@ -386,6 +391,8 @@ class AlphaFold(nn.Module):
                     use_lma=self.globals.use_lma,
                     pair_mask=pair_mask.to(dtype=m.dtype),
                     _mask_trans=self.config._mask_trans,
+                    entity_id=entity_id,
+                    msa_entity_map=extra_msa_entity_map
                 )
 
                 del input_tensors
@@ -400,14 +407,9 @@ class AlphaFold(nn.Module):
                     pair_mask=pair_mask.to(dtype=m.dtype),
                     inplace_safe=inplace_safe,
                     _mask_trans=self.config._mask_trans,
+                    entity_id=entity_id,
+                    msa_entity_map=extra_msa_entity_map
                 )
-
-        if self.chain_attention_mask:
-            print('USING ENTITY ID')
-            entity_id = feats['entity_id']
-        else:
-            print('NOT USING ENTITY ID')
-            entity_id = None
 
         # Run MSA + pair embeddings through the trunk of the network
         # m: [*, S, N, C_m]
@@ -424,7 +426,8 @@ class AlphaFold(nn.Module):
                 use_deepspeed_evo_attention=self.globals.use_deepspeed_evo_attention,
                 use_lma=self.globals.use_lma,
                 _mask_trans=self.config._mask_trans,
-                entity_id=entity_id
+                entity_id=entity_id,
+                msa_entity_map=msa_entity_map
             )
 
             del input_tensors
@@ -440,7 +443,8 @@ class AlphaFold(nn.Module):
                 use_flash=self.globals.use_flash,
                 inplace_safe=inplace_safe,
                 _mask_trans=self.config._mask_trans,
-                entity_id=entity_id
+                entity_id=entity_id,
+                msa_entity_map=msa_entity_map
             )
 
         outputs["msa"] = m[..., :n_seq, :, :]
