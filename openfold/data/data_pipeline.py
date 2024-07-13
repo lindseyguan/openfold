@@ -700,6 +700,8 @@ def pad_msa(np_example, min_num_seq):
             np_example[feat], ((0, min_num_seq - num_seq), (0, 0)))
       np_example['cluster_bias_mask'] = np.pad(
           np_example['cluster_bias_mask'], ((0, min_num_seq - num_seq),))
+      np_example['msa_entity_map'] = np.pad(
+          np_example['msa_entity_map'], ((0, min_num_seq - num_seq),))
     return np_example
 
 

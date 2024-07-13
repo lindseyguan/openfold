@@ -204,6 +204,7 @@ def main(args):
     is_multimer = "multimer" in args.config_preset
     if is_multimer:
         config.model.attention_mask = args.use_attention_mask
+        config.model.extra_msa.extra_msa_stack.no_column_attention = args.no_global_attention
 
     is_custom_template = "use_custom_template" in args and args.use_custom_template
     if is_custom_template:
@@ -535,6 +536,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_attention_mask", action="store_true", default=False, 
         help="Whether to use interchain attention masking.",
+    )
+    parser.add_argument(
+        "--no_global_attention", action="store_true", default=False, 
+        help="Whether to use global column attention.",
     )
 
     add_data_args(parser)

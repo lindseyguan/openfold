@@ -580,6 +580,7 @@ class ExtraMSABlock(MSABlock):
         inf: float,
         eps: float,
         ckpt: bool,
+        no_column_attention: bool = False,
     ):
         super(ExtraMSABlock, self).__init__(c_m=c_m,
                                             c_z=c_z,
@@ -598,6 +599,7 @@ class ExtraMSABlock(MSABlock):
                                             eps=eps)
 
         self.ckpt = ckpt
+        self.no_column_attention = no_column_attention
 
         self.msa_att_col = MSAColumnGlobalAttention(
             c_in=c_m,
@@ -677,16 +679,16 @@ class ExtraMSABlock(MSABlock):
                 torch.cuda.empty_cache()
                 m, z = input_tensors
 
-            m = add(m,
-                    self.msa_att_col(
-                        m,
-                        mask=msa_mask,
-                        chunk_size=chunk_size,
-                        use_lma=use_lma,
-                        msa_entity_map=msa_entity_map
-                    ),
-                    inplace=inplace_safe,
-                    )
+            if not self.no_column_attention:
+                m = add(m,
+                        self.msa_att_col(
+                            m,
+                            mask=msa_mask,
+                            chunk_size=chunk_size,
+                            use_lma=use_lma
+                        ),
+                        inplace=inplace_safe,
+                        )
 
             m = add(
                 m,
@@ -1069,6 +1071,7 @@ class ExtraMSAStack(nn.Module):
         ckpt: bool,
         clear_cache_between_blocks: bool = False,
         tune_chunk_size: bool = False,
+        no_column_attention: bool = False,
         **kwargs,
     ):
         super(ExtraMSAStack, self).__init__()
@@ -1094,6 +1097,7 @@ class ExtraMSAStack(nn.Module):
                 inf=inf,
                 eps=eps,
                 ckpt=False,
+                no_column_attention=no_column_attention
             )
             self.blocks.append(block)
             
@@ -1126,7 +1130,6 @@ class ExtraMSAStack(nn.Module):
                 inplace_safe=inplace_safe,
                 _mask_trans=_mask_trans,
                 entity_id=entity_id,
-                msa_entity_map=msa_entity_map
             ) for b in self.blocks
         ]
 

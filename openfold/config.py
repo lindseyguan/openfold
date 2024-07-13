@@ -584,6 +584,7 @@ config = mlc.ConfigDict(
                     "inf": 1e9,
                     "eps": eps,  # 1e-10,
                     "ckpt": blocks_per_ckpt is not None,
+                    "no_column_attention": False,
                 },
                 "enabled": True,
             },
