@@ -232,7 +232,10 @@ class AlphaFold(nn.Module):
         seq_mask = feats["seq_mask"]
         pair_mask = seq_mask[..., None] * seq_mask[..., None, :]
         msa_mask = feats["msa_mask"]
-        entity_id = feats["entity_id"]
+        if self.chain_attention_mask:
+            entity_id = feats["entity_id"]
+        else:
+            entity_id = None
         msa_entity_map = feats["msa_entity_map"]
         extra_msa_entity_map = feats["extra_msa_entity_map"]
 
