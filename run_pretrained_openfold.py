@@ -203,6 +203,7 @@ def main(args):
 
     is_multimer = "multimer" in args.config_preset
     if is_multimer:
+        config.model.intrachain_mask = args.use_intrachain_mask
         config.model.attention_mask = args.use_attention_mask
         config.model.extra_msa.extra_msa_stack.no_column_attention = args.no_global_attention
 
@@ -246,8 +247,6 @@ def main(args):
     if random_seed is None:
         random_seed = random.randrange(2 ** 32)
 
-    np.random.seed(random_seed)
-    torch.manual_seed(random_seed + 1)
     feature_processor = feature_pipeline.FeaturePipeline(config.data)
     if not os.path.exists(output_dir_base):
         os.makedirs(output_dir_base)
@@ -295,132 +294,157 @@ def main(args):
         args.output_dir)
 
     for model, output_directory in model_generator:
-        cur_tracing_interval = 0
         for (tag, tags), seqs in sorted_targets:
+            # try:
             output_name = f'{tag}_{args.config_preset}'
             if args.output_postfix is not None:
                 output_name = f'{output_name}_{args.output_postfix}'
 
+            cur_tracing_interval = 0
+
             # Does nothing if the alignments have already been computed
             precompute_alignments(tags, seqs, alignment_dir, args)
 
-            feature_dict = feature_dicts.get(tag, None)
-            if feature_dict is None:
-                feature_dict = generate_feature_dict(
-                    tags,
-                    seqs,
-                    alignment_dir,
-                    data_processor,
-                    args,
-                )
+            for seed in range(random_seed, random_seed + args.num_seeds):
+                np.random.seed(seed)
+                torch.manual_seed(seed + 1)
 
-                if args.trace_model:
-                    n = feature_dict["aatype"].shape[-2]
-                    rounded_seqlen = round_up_seqlen(n)
-                    feature_dict = pad_feature_dict_seq(
-                        feature_dict, rounded_seqlen,
-                    )
-
-                feature_dicts[tag] = feature_dict
-
-            raw_msa = feature_dict['msa']
-
-            processed_feature_dict = feature_processor.process_features(
-                feature_dict, mode='predict', is_multimer=is_multimer
-            )
-            processed_feature_dict = {
-                k: torch.as_tensor(v, device=args.model_device)
-                for k, v in processed_feature_dict.items()
-            }
-            if args.trace_model:
-                if rounded_seqlen > cur_tracing_interval:
-                    logger.info(
-                        f"Tracing model at {rounded_seqlen} residues..."
-                    )
-                    t = time.perf_counter()
-                    trace_model_(model, processed_feature_dict)
-                    tracing_time = time.perf_counter() - t
-                    logger.info(
-                        f"Tracing time: {tracing_time}"
-                    )
-                    cur_tracing_interval = rounded_seqlen
-
-            out = run_model(model, processed_feature_dict, tag, args.output_dir)
-
-            # Toss out the recycling dimensions --- we don't need them anymore
-            processed_feature_dict = tensor_tree_map(
-                lambda x: np.array(x[..., -1].cpu()),
-                processed_feature_dict
-            )
-            out = tensor_tree_map(lambda x: np.array(x.cpu()), out)
-
-            unrelaxed_protein = prep_output(
-                out,
-                processed_feature_dict,
-                feature_dict,
-                feature_processor,
-                args.config_preset,
-                args.multimer_ri_gap,
-                args.subtract_plddt
-            )
-
-            unrelaxed_file_suffix = "_unrelaxed.pdb"
-            if args.cif_output:
-                unrelaxed_file_suffix = "_unrelaxed.cif"
-            unrelaxed_output_path = os.path.join(
-                output_directory, f'{output_name}{unrelaxed_file_suffix}'
-            )
-
-            with open(unrelaxed_output_path, 'w') as fp:
+                unrelaxed_file_suffix = f"_seed{seed}_unrelaxed.pdb"
                 if args.cif_output:
-                    fp.write(protein.to_modelcif(unrelaxed_protein))
-                else:
-                    fp.write(protein.to_pdb(unrelaxed_protein))
-
-            logger.info(f"Output written to {unrelaxed_output_path}...")
-
-            if not args.skip_relaxation:
-                # Relax the prediction.
-                logger.info(f"Running relaxation on {unrelaxed_output_path}...")
-                relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
-                              args.cif_output)
-
-            if args.save_outputs:
-                output_dict_path = os.path.join(
-                    output_directory, f'{output_name}_output_dict.pkl'
-                )
-                with open(output_dict_path, "wb") as fp:
-                    pickle.dump(out, fp, protocol=pickle.HIGHEST_PROTOCOL)
-
-                logger.info(f"Model output written to {output_dict_path}...")
-
-            if args.save_scores:
-                output_dict_path = os.path.join(
-                    output_directory, f'{output_name}_output_dict_scores.pkl'
-                )
-                scores = ['plddt', 'distogram_logits', 'ptm_score', 'predicted_aligned_error']
-                if is_multimer:
-                    scores.append('ptm_score')
-                    scores.append('iptm_score')
-
-                scores_dict = {}
-                for s in scores:
-                    scores_dict[s] = out[s]
-
-                with open(output_dict_path, "wb") as fp:
-                    pickle.dump(scores_dict, fp, protocol=pickle.HIGHEST_PROTOCOL)
-
-                logger.info(f"Scores output written to {output_dict_path}...")
-
-            if args.save_msa:
-                output_dict_path = os.path.join(
-                    output_directory, f'{output_name}_output_msa_features.pkl'
+                    unrelaxed_file_suffix = f"_seed{seed}_unrelaxed.cif"
+                unrelaxed_output_path = os.path.join(
+                    output_directory, f'{output_name}{unrelaxed_file_suffix}'
                 )
 
-                with open(output_dict_path, "wb") as fp:
-                    pickle.dump(raw_msa, fp, protocol=pickle.HIGHEST_PROTOCOL)
+                if os.path.isfile(unrelaxed_output_path): # skip if already done
+                    if args.save_scores:
+                        output_dict_path = os.path.join(
+                            output_directory, f'{output_name}_seed{seed}_output_dict_scores.pkl'
+                        )
+                        if os.path.isfile(output_dict_path):
+                            continue
+                    else:
+                        continue
 
-                logger.info(f"MSA output written to {output_dict_path}...")
+                feature_dict = feature_dicts.get(tag, None)
+                if feature_dict is None:
+                    feature_dict = generate_feature_dict(
+                        tags,
+                        seqs,
+                        alignment_dir,
+                        data_processor,
+                        args,
+                    )
+
+                    if args.trace_model:
+                        n = feature_dict["aatype"].shape[-2]
+                        rounded_seqlen = round_up_seqlen(n)
+                        feature_dict = pad_feature_dict_seq(
+                            feature_dict, rounded_seqlen,
+                        )
+
+                    feature_dicts[tag] = feature_dict
+
+                raw_msa = feature_dict['msa']
+
+                processed_feature_dict = feature_processor.process_features(
+                    feature_dict, mode='predict', is_multimer=is_multimer
+                )
+                processed_feature_dict = {
+                    k: torch.as_tensor(v, device=args.model_device)
+                    for k, v in processed_feature_dict.items()
+                }
+                if args.trace_model:
+                    if rounded_seqlen > cur_tracing_interval:
+                        logger.info(
+                            f"Tracing model at {rounded_seqlen} residues..."
+                        )
+                        t = time.perf_counter()
+                        trace_model_(model, processed_feature_dict)
+                        tracing_time = time.perf_counter() - t
+                        logger.info(
+                            f"Tracing time: {tracing_time}"
+                        )
+                        cur_tracing_interval = rounded_seqlen
+
+                out = run_model(model, 
+                                processed_feature_dict, 
+                                tag, 
+                                args.output_dir, seed
+                               )
+
+                # Toss out the recycling dimensions --- we don't need them anymore
+                processed_feature_dict = tensor_tree_map(
+                    lambda x: np.array(x[..., -1].cpu()),
+                    processed_feature_dict
+                )
+                out = tensor_tree_map(lambda x: np.array(x.cpu()), out)
+
+                unrelaxed_protein = prep_output(
+                    out,
+                    processed_feature_dict,
+                    feature_dict,
+                    feature_processor,
+                    args.config_preset,
+                    args.multimer_ri_gap,
+                    args.subtract_plddt
+                )
+
+                with open(unrelaxed_output_path, 'w') as fp:
+                    if args.cif_output:
+                        fp.write(protein.to_modelcif(unrelaxed_protein))
+                    else:
+                        fp.write(protein.to_pdb(unrelaxed_protein))
+
+                logger.info(f"Output written to {unrelaxed_output_path}...")
+
+                if not args.skip_relaxation:
+                    # Relax the prediction.
+                    logger.info(f"Running relaxation on {unrelaxed_output_path}, seed {seed}")
+                    relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
+                                  args.cif_output)
+
+                if args.save_outputs:
+                    output_dict_path = os.path.join(
+                        output_directory, f'{output_name}_seed{seed}_output_dict.pkl'
+                    )
+                    with open(output_dict_path, "wb") as fp:
+                        pickle.dump(out, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+                    logger.info(f"Model output written to {output_dict_path}...")
+
+                if args.save_scores:
+                    output_dict_path = os.path.join(
+                        output_directory, f'{output_name}_seed{seed}_output_dict_scores.pkl'
+                    )
+                    scores = ['plddt', 'distogram_logits', 'ptm_score', 'predicted_aligned_error']
+                    if is_multimer:
+                        scores.append('ptm_score')
+                        scores.append('iptm_score')
+
+                    scores_dict = {}
+                    for s in scores:
+                        scores_dict[s] = out[s]
+
+                    with open(output_dict_path, "wb") as fp:
+                        pickle.dump(scores_dict, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+                    logger.info(f"Scores output written to {output_dict_path}...")
+            # except:
+            #     print(f'error with {tag}, model {tag}_{args.config_preset}')
+
+            try:
+                if args.save_msa:
+                    output_dict_path = os.path.join(
+                        output_directory, f'{output_name}_output_msa_features.pkl'
+                    )
+
+                    with open(output_dict_path, "wb") as fp:
+                        pickle.dump(raw_msa, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+                    logger.info(f"MSA output written to {output_dict_path}...")
+            except:
+                print(f'could not save MSA for {tag}, model {tag}_{args.config_preset}')
 
 
 if __name__ == "__main__":
@@ -538,8 +562,16 @@ if __name__ == "__main__":
         help="Whether to use interchain attention masking.",
     )
     parser.add_argument(
+        "--use_intrachain_mask", action="store_true", default=False, 
+        help="Whether to use intrachain attention masking.",
+    )
+    parser.add_argument(
         "--no_global_attention", action="store_true", default=False, 
         help="Whether to use global column attention.",
+    )
+    parser.add_argument(
+        "--num_seeds", type=int, default=1, 
+        help="How many predictions to run; will run [data_random_seed, data_random_seed + n] predictions",
     )
 
     add_data_args(parser)

@@ -136,8 +136,9 @@ class MSAAttention(nn.Module):
         z: Optional[torch.Tensor],
         mask: Optional[torch.Tensor],
         inplace_safe: bool = False,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: 
         n_seq, n_res = m.shape[-3:-1]
         if mask is None:
@@ -150,17 +151,35 @@ class MSAAttention(nn.Module):
         mask_bias = (self.inf * (mask - 1))[..., :, None, None, :]
 
         # [1, N_head, N_res, N_res]
-        if entity_id != None:
-            att_bias = (entity_id.unsqueeze(1) == entity_id).int() # make 2D tensor
-            att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
-            att_bias = (self.inf * (att_bias.unsqueeze(0) - 1)) # unsqueeze and set to -inf
+        if asym_id != None:
+            if not intrachain_mask:
+                att_bias = (asym_id.unsqueeze(1) == asym_id).int() # make 2D tensor
+                att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+                att_bias = (self.inf * (att_bias.unsqueeze(0) - 1)) # unsqueeze and set to -inf
+            else:
+                asym_row = asym_id.unsqueeze(1)  # Shape: (N, 1)
+                asym_col = asym_id.unsqueeze(0)  # Shape: (1, N)
+                mask = (asym_row == 2) & (asym_col == 2) # only for chain 2
+
+                att_bias = torch.where(mask, torch.tensor(0), torch.tensor(1)).int()
+                att_bias = att_bias.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+                att_bias = (self.inf * (att_bias.unsqueeze(0) - 1)) # unsqueeze and set to -inf
         else:
             att_bias = None
 
-        if msa_entity_map != None:
-            att_bias_col = (msa_entity_map.unsqueeze(1) == msa_entity_map).int() # make 2D tensor
-            att_bias_col = att_bias_col.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
-            att_bias_col = (self.inf * (att_bias_col.unsqueeze(0) - 1)) # unsqueeze and set to -inf
+        if msa_asym_map != None:
+            if not intrachain_mask:
+                att_bias_col = (msa_asym_map.unsqueeze(1) == msa_asym_map).int() # make 2D tensor
+                att_bias_col = att_bias_col.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+                att_bias_col = (self.inf * (att_bias_col.unsqueeze(0) - 1)) # unsqueeze and set to -inf
+            else:
+                asym_row = msa_asym_map.unsqueeze(1)  # Shape: (N, 1)
+                asym_col = msa_asym_map.unsqueeze(0)  # Shape: (1, N)
+                mask = (asym_row == 2) & (asym_col == 2) # only for chain 2
+
+                att_bias_col = torch.where(mask, torch.tensor(0), torch.tensor(1)).int()
+                att_bias_col = att_bias_col.unsqueeze(0).repeat(self.no_heads, 1, 1) # repeat for heads
+                att_bias_col = (self.inf * (att_bias_col.unsqueeze(0) - 1)) # unsqueeze and set to -inf
         else:
             att_bias_col = None
 
@@ -198,8 +217,9 @@ class MSAAttention(nn.Module):
         chunk_logits: int,
         checkpoint: bool,
         inplace_safe: bool = False,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> torch.Tensor:
         """ 
         MSA attention with training-time chunking of the softmax computation.
@@ -211,7 +231,9 @@ class MSAAttention(nn.Module):
         def _get_qkv(m, z):
             m, mask_bias, z, att_bias, att_bias_col = self._prep_inputs(
                 m, z, mask, inplace_safe=inplace_safe, 
-                entity_id=entity_id, msa_entity_map=msa_entity_map
+                asym_id=asym_id, 
+                intrachain_mask=intrachain_mask,
+                msa_asym_map=msa_asym_map
             )
             m = self.layer_norm_m(m)
             q, k, v = self.mha._prep_qkv(m, m)
@@ -254,8 +276,9 @@ class MSAAttention(nn.Module):
         inplace_safe: bool = False,
         _chunk_logits: Optional[int] = None,
         _checkpoint_chunks: Optional[bool] = None,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -278,8 +301,9 @@ class MSAAttention(nn.Module):
                 chunk_logits=_chunk_logits, 
                 checkpoint=_checkpoint_chunks,
                 inplace_safe=inplace_safe,
-                entity_id=entity_id,
-                msa_entity_map=msa_entity_map
+                asym_id=asym_id,
+                intrachain_mask=intrachain_mask,
+                msa_asym_map=msa_asym_map
             )
        
         if(use_flash):
@@ -288,7 +312,9 @@ class MSAAttention(nn.Module):
         else:
             m, mask_bias, z, att_bias, att_bias_col = self._prep_inputs(
                 m, z, mask, inplace_safe=inplace_safe, 
-                entity_id=entity_id, msa_entity_map=msa_entity_map
+                asym_id=asym_id,
+                intrachain_mask=intrachain_mask,
+                msa_asym_map=msa_asym_map
             )
     
             biases = [mask_bias]
@@ -402,7 +428,8 @@ class MSAColumnAttention(nn.Module):
         use_deepspeed_evo_attention: bool = False,
         use_lma: bool = False,
         use_flash: bool = False,
-        msa_entity_map: torch.Tensor = None
+        msa_asym_map: torch.Tensor = None,
+        intrachain_mask: bool = False,
     ) -> torch.Tensor:
         """
         Args:
@@ -427,7 +454,8 @@ class MSAColumnAttention(nn.Module):
             use_deepspeed_evo_attention=use_deepspeed_evo_attention,
             use_lma=use_lma,
             use_flash=use_flash,
-            msa_entity_map=msa_entity_map
+            msa_asym_map=msa_asym_map,
+            intrachain_mask=intrachain_mask
         )
 
         # [*, N_seq, N_res, C_in]
@@ -466,7 +494,7 @@ class MSAColumnGlobalAttention(nn.Module):
         mask: torch.Tensor,
         chunk_size: int,
         use_lma: bool = False,
-        msa_entity_map: torch.Tensor = None
+        msa_asym_map: torch.Tensor = None,
     ) -> torch.Tensor:
         mha_input = {
             "m": m,
@@ -490,7 +518,7 @@ class MSAColumnGlobalAttention(nn.Module):
         mask: Optional[torch.Tensor] = None, 
         chunk_size: Optional[int] = None,
         use_lma: bool = False,
-        msa_entity_map: torch.Tensor = None
+        msa_asym_map: torch.Tensor = None
     ) -> torch.Tensor:
         n_seq, n_res, c_in = m.shape[-3:]
 

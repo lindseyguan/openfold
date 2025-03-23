@@ -40,7 +40,7 @@ MSA_PAD_VALUES = {'msa_all_seq': MSA_GAP_IDX,
                   'deletion_matrix': 0,
                   'deletion_matrix_int': 0}
 
-MSA_FEATURES = ('msa', 'msa_mask', 'deletion_matrix', 'deletion_matrix_int', 'msa_entity_map')
+MSA_FEATURES = ('msa', 'msa_mask', 'deletion_matrix', 'deletion_matrix_int', 'msa_asym_map')
 SEQ_FEATURES = ('residue_index', 'aatype', 'all_atom_positions',
                 'all_atom_mask', 'seq_mask', 'between_segment_residues',
                 'has_alt_locations', 'has_hetatoms', 'asym_id', 'entity_id',
@@ -373,7 +373,7 @@ def _merge_features_from_multiple_chains(
     if feature_name_split in MSA_FEATURES:
       if pair_msa_sequences or '_all_seq' in feature_name:
         merged_example[feature_name] = np.concatenate(feats, axis=1)
-      elif 'entity_map' in feature_name:
+      elif 'asym_map' in feature_name:
         merged_example[feature_name] = np.concatenate(feats)
       else:
         merged_example[feature_name] = block_diag(

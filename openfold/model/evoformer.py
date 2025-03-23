@@ -434,8 +434,9 @@ class EvoformerBlock(MSABlock):
         _attn_chunk_size: Optional[int] = None,
         _offload_inference: bool = False,
         _offloadable_inputs: Optional[Sequence[torch.Tensor]] = None,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         msa_trans_mask = msa_mask if _mask_trans else None
@@ -470,7 +471,8 @@ class EvoformerBlock(MSABlock):
                         use_memory_efficient_kernel=False,
                         use_deepspeed_evo_attention=use_deepspeed_evo_attention,
                         use_lma=use_lma,
-                        entity_id=entity_id
+                        asym_id=asym_id,
+                        intrachain_mask=intrachain_mask
                     )
                 ),
                 inplace=inplace_safe,
@@ -494,7 +496,8 @@ class EvoformerBlock(MSABlock):
                         use_deepspeed_evo_attention=use_deepspeed_evo_attention,
                         use_lma=use_lma,
                         use_flash=use_flash,
-                        msa_entity_map=msa_entity_map
+                        msa_asym_map=msa_asym_map,
+                        intrachain_mask=intrachain_mask
                     ),
                     inplace=inplace_safe,
                     )
@@ -622,8 +625,9 @@ class ExtraMSABlock(MSABlock):
         _attn_chunk_size: Optional[int] = None,
         _offload_inference: bool = False,
         _offloadable_inputs: Optional[Sequence[torch.Tensor]] = None,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if(_attn_chunk_size is None):
             _attn_chunk_size = chunk_size
@@ -657,7 +661,8 @@ class ExtraMSABlock(MSABlock):
                     use_memory_efficient_kernel=not (use_lma or use_deepspeed_evo_attention),
                     _checkpoint_chunks=
                         self.ckpt if torch.is_grad_enabled() else False,
-                    entity_id=entity_id
+                    asym_id=asym_id,
+                    intrachain_mask=intrachain_mask
                 )
             ),
             inplace=inplace_safe,
@@ -880,8 +885,9 @@ class EvoformerStack(nn.Module):
         pair_mask: Optional[torch.Tensor],
         inplace_safe: bool,
         _mask_trans: bool,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ):
         blocks = [
             partial(
@@ -894,8 +900,9 @@ class EvoformerStack(nn.Module):
                 use_flash=use_flash,
                 inplace_safe=inplace_safe,
                 _mask_trans=_mask_trans,
-                entity_id=entity_id,
-                msa_entity_map=msa_entity_map
+                asym_id=asym_id,
+                intrachain_mask=intrachain_mask,
+                msa_asym_map=msa_asym_map
             )
             for b in self.blocks
         ]
@@ -935,8 +942,9 @@ class EvoformerStack(nn.Module):
         use_lma: bool = False,
         use_flash: bool = False,
         _mask_trans: bool = True,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         assert(not (self.training or torch.is_grad_enabled()))
         blocks = self._prep_blocks(
@@ -952,8 +960,9 @@ class EvoformerStack(nn.Module):
             pair_mask=pair_mask,
             inplace_safe=True,
             _mask_trans=_mask_trans,
-            entity_id=entity_id,
-            msa_entity_map=msa_entity_map
+            asym_id=asym_id,
+            intrachain_mask=intrachain_mask,
+            msa_asym_map=msa_asym_map
         )
 
         for b in blocks:
@@ -984,8 +993,9 @@ class EvoformerStack(nn.Module):
         use_flash: bool = False,
         inplace_safe: bool = False,
         _mask_trans: bool = True,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Args:
@@ -1028,8 +1038,9 @@ class EvoformerStack(nn.Module):
             pair_mask=pair_mask,
             inplace_safe=inplace_safe,
             _mask_trans=_mask_trans,
-            entity_id=entity_id,
-            msa_entity_map=msa_entity_map,
+            asym_id=asym_id,
+            intrachain_mask=intrachain_mask,
+            msa_asym_map=msa_asym_map,
         )
 
         blocks_per_ckpt = self.blocks_per_ckpt
@@ -1116,8 +1127,9 @@ class ExtraMSAStack(nn.Module):
         pair_mask: Optional[torch.Tensor],
         inplace_safe: bool,
         _mask_trans: bool,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ):
         blocks = [
             partial(
@@ -1129,7 +1141,8 @@ class ExtraMSAStack(nn.Module):
                 use_lma=use_lma,
                 inplace_safe=inplace_safe,
                 _mask_trans=_mask_trans,
-                entity_id=entity_id,
+                asym_id=asym_id,
+                intrachain_mask=intrachain_mask
             ) for b in self.blocks
         ]
 
@@ -1168,8 +1181,9 @@ class ExtraMSAStack(nn.Module):
         msa_mask: Optional[torch.Tensor] = None,
         pair_mask: Optional[torch.Tensor] = None,
         _mask_trans: bool = True,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> torch.Tensor:
         assert(not (self.training or torch.is_grad_enabled()))
         blocks = self._prep_blocks(
@@ -1184,8 +1198,9 @@ class ExtraMSAStack(nn.Module):
             pair_mask=pair_mask,
             inplace_safe=True,
             _mask_trans=_mask_trans,
-            entity_id=entity_id,
-            msa_entity_map=msa_entity_map
+            asym_id=asym_id,
+            intrachain_mask=intrachain_mask,
+            msa_asym_map=msa_asym_map
         )
 
         for b in blocks:
@@ -1211,8 +1226,9 @@ class ExtraMSAStack(nn.Module):
         use_lma: bool = False,
         inplace_safe: bool = False,
         _mask_trans: bool = True,
-        entity_id: torch.Tensor = None,
-        msa_entity_map: torch.Tensor = None
+        asym_id: torch.Tensor = None,
+        intrachain_mask: bool = False,
+        msa_asym_map: torch.Tensor = None
     ) -> torch.Tensor:
         """
         Args:
@@ -1241,8 +1257,9 @@ class ExtraMSAStack(nn.Module):
             pair_mask=pair_mask,
             inplace_safe=inplace_safe,
             _mask_trans=_mask_trans,
-            entity_id=entity_id,
-            msa_entity_map=msa_entity_map
+            asym_id=asym_id,
+            intrachain_mask=intrachain_mask,
+            msa_asym_map=msa_asym_map
         )
 
         for b in blocks:

@@ -147,15 +147,17 @@ def update_timings(timing_dict, output_file=os.path.join(os.getcwd(), "timings.j
     return output_file
 
 
-def run_model(model, batch, tag, output_dir):
+def run_model(model, batch, tag, output_dir, seed=None):
     with torch.no_grad():
         # Temporarily disable templates if there aren't any in the batch
         template_enabled = model.config.template.enabled
         model.config.template.enabled = template_enabled and any([
             "template_" in k for k in batch
         ])
-
-        logger.info(f"Running inference for {tag}...")
+        if seed:
+            logger.info(f"Running inference for {tag}, {seed}")
+        else:
+            logger.info(f"Running inference for {tag}")
         t = time.perf_counter()
         out = model(batch)
         inference_time = time.perf_counter() - t

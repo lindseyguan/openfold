@@ -770,13 +770,13 @@ multimer_config_update = mlc.ConfigDict({
                 "extra_deletion_matrix": [NUM_EXTRA_SEQ, NUM_RES],
                 "extra_msa": [NUM_EXTRA_SEQ, NUM_RES],
                 "extra_msa_mask": [NUM_EXTRA_SEQ, NUM_RES],
-                "extra_msa_entity_map": [NUM_EXTRA_SEQ],
+                "extra_msa_asym_map": [NUM_EXTRA_SEQ],
 
                 # "mem_peak": [],
                 "msa": [NUM_MSA_SEQ, NUM_RES],
                 "msa_feat": [NUM_MSA_SEQ, NUM_RES, None],
                 "msa_mask": [NUM_MSA_SEQ, NUM_RES],
-                "msa_entity_map": [NUM_MSA_SEQ],
+                "msa_asym_map": [NUM_MSA_SEQ],
                 "msa_profile": [NUM_RES, None],
                 "num_alignments": [],
                 "num_templates": [],
@@ -808,7 +808,7 @@ multimer_config_update = mlc.ConfigDict({
                     "no_recycling_iters",
                     # Additional multimer features
                     "msa_mask",
-                    "msa_entity_map",
+                    "msa_asym_map",
                     "seq_mask",
                     "asym_id",
                     "entity_id",
@@ -893,7 +893,8 @@ multimer_config_update = mlc.ConfigDict({
             },
         },
         "recycle_early_stop_tolerance": 0.5,  # For training, value is -1.
-        "attention_mask": False
+        "attention_mask": False,
+        "intrachain_mask": False
     },
     "loss": {
         "fape": {

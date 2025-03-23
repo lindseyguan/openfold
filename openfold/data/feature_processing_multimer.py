@@ -72,7 +72,7 @@ def pair_and_merge(
     )
     np_chains_list = msa_pairing.deduplicate_unpaired_sequences(np_chains_list)
   else:
-    REQUIRED_FEATURES.add('msa_entity_map')
+    REQUIRED_FEATURES.add('msa_asym_map')
 
   np_chains_list = crop_chains(
       np_chains_list,
@@ -159,7 +159,7 @@ def _crop_single_chain(chain: Mapping[str, np.ndarray],
     if k_split in msa_pairing.TEMPLATE_FEATURES:
       chain[k] = chain[k][:templates_crop_size, :]
     elif k_split in msa_pairing.MSA_FEATURES:
-      if 'msa_entity_map' in k:
+      if 'msa_asym_map' in k:
         chain[k] = chain[k][:msa_crop_size]
       elif '_all_seq' in k and pair_msa_sequences:
         chain[k] = chain[k][:msa_crop_size_all_seq, :]
@@ -252,5 +252,5 @@ def process_unmerged_features(
   for chain_features in all_chain_features.values():
     chain_features['entity_mask'] = (
         chain_features['entity_id'] != 0).astype(np.int32)
-    chain_features['msa_entity_map'] = np.repeat(chain_features['entity_id'][0],
+    chain_features['msa_asym_map'] = np.repeat(chain_features['asym_id'][0],
                                                  chain_features['msa'].shape[0])
